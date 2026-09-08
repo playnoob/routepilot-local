@@ -186,6 +186,39 @@ async def create_driver(payload: DriverIn) -> dict[str, Any]:
     return {"id": driver_id, **payload.model_dump(), "status": "available", "shipment_count": 0}
 
 
+@app.put("/api/drivers/{driver_id}", response_model=Driver)
+async def update_driver(driver_id: str, payload: DriverIn) -> dict[str, Any]:
+    with connect() as connection:
+        cursor = connection.execute(
+            "UPDATE drivers SET name=?, phone=? WHERE id=?",
+            (payload.name, payload.phone, driver_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Driver not found")
+        row = connection.execute(
+            "SELECT d.*, COUNT(o.id) AS shipment_count FROM drivers d "
+            "LEFT JOIN orders o ON o.driver_id=d.id AND o.status != 'delivered' "
+            "WHERE d.id=? GROUP BY d.id",
+            (driver_id,),
+        ).fetchone()
+    return driver_to_dict(row, row["shipment_count"])
+
+
+@app.delete("/api/drivers/{driver_id}", status_code=204)
+async def delete_driver(driver_id: str) -> Response:
+    with connect() as connection:
+        assigned = connection.execute(
+            "SELECT COUNT(*) FROM orders WHERE driver_id=? AND status != 'delivered'",
+            (driver_id,),
+        ).fetchone()[0]
+        if assigned:
+            raise HTTPException(status_code=409, detail="لا يمكن حذف مندوب لديه شحنات مفتوحة")
+        cursor = connection.execute("DELETE FROM drivers WHERE id=?", (driver_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Driver not found")
+    return Response(status_code=204)
+
+
 @app.get("/api/orders")
 async def list_orders() -> list[dict[str, Any]]:
     with connect() as connection:

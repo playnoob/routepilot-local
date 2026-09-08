@@ -22,11 +22,25 @@
     </section>
     <section class="stats"><article><span>المندوبون النشطون</span><strong id="driver-count">—</strong><i>DRIVERS</i></article><article><span>الشحنات المفتوحة</span><strong id="order-count">—</strong><i>OPEN LOAD</i></article><article><span>حالة التوجيه</span><strong class="accent">READY</strong><i>PHOTON / OSRM</i></article></section>
     <section class="workspace">
-      <div class="panel drivers"><div class="panel-head"><div><p class="eyebrow">TEAM / 02</p><h2>فريق التوصيل</h2></div><button class="button small" id="add-driver">+ مندوب جديد</button></div><div id="drivers-list" class="list"></div></div>
+      <div class="panel drivers"><div class="panel-head"><div><p class="eyebrow">TEAM / 02</p><h2>فريق التوصيل</h2><small class="panel-note">إدارة الأسماء والأرقام من مكان واحد</small></div><button class="button small" id="add-driver">+ مندوب جديد</button></div><div id="drivers-list" class="list"></div></div>
       <div class="panel orders"><div class="panel-head"><div><p class="eyebrow">DISPATCH / 03</p><h2>الشحنات الأخيرة</h2></div><button class="button small ghost" id="refresh">تحديث</button></div><div id="orders-list" class="list"></div></div>
     </section>
     <footer><span>ROUTEPILOT / v1.0</span><span>بياناتك لا تغادر جهازك</span></footer>
   </main>
+  <div class="modal-backdrop" id="driver-modal" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="driver-modal-title">
+      <button class="modal-close" id="modal-close" aria-label="إغلاق">×</button>
+      <p class="eyebrow" id="modal-kicker">TEAM / NEW</p>
+      <h2 id="driver-modal-title">إضافة مندوب</h2>
+      <p class="modal-copy">أدخل بيانات المندوب لتظهر فوراً في لوحة التشغيل.</p>
+      <form id="driver-form">
+        <label>اسم المندوب<input id="driver-name" required minlength="2" maxlength="100" autocomplete="name"></label>
+        <label>رقم الهاتف<input id="driver-phone" maxlength="30" inputmode="tel" autocomplete="tel"></label>
+        <p class="form-error" id="form-error"></p>
+        <div class="modal-actions"><button type="button" class="button ghost" id="modal-cancel">إلغاء</button><button type="submit" class="button">حفظ البيانات</button></div>
+      </form>
+    </section>
+  </div>
   <script src="/static/app.js"></script>
 </body>
 </html>
