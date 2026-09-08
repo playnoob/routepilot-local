@@ -75,6 +75,73 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() { loading = false; error = exception.toString(); });
     }
   }
+
+  Future<void> addOrder() async {
+    final customerController = TextEditingController();
+    final addressController = TextEditingController();
+    final value = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('إضافة شحنة'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: customerController,
+              decoration: const InputDecoration(labelText: 'اسم العميل'),
+            ),
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(labelText: 'العنوان بالتفصيل'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('إضافة')),
+        ],
+      ),
+    );
+    if (value != true) {
+      customerController.dispose();
+      addressController.dispose();
+      return;
+    }
+    final customerName = customerController.text.trim();
+    final address = addressController.text.trim();
+    customerController.dispose();
+    addressController.dispose();
+    if (customerName.isEmpty || address.length < 3) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('اكتب اسم العميل والعنوان بالتفصيل')),
+        );
+      }
+      return;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('$apiBase/api/orders'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'customer_name': customerName, 'address': address}),
+      );
+      if (response.statusCode >= 400) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        throw Exception(body['detail'] ?? 'تعذر إضافة الشحنة');
+      }
+      await load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تمت إضافة الشحنة وتحديد موقعها')),
+        );
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$exception')));
+      }
+    }
+  }
   Future<void> optimize() async {
     if (orders.isEmpty) return;
     try {
@@ -102,13 +169,65 @@ class _OrdersPageState extends State<OrdersPage> {
           IconButton(onPressed: editServerUrl, tooltip: 'إعداد الخادم', icon: const Icon(Icons.settings_outlined)),
           IconButton(onPressed: load, icon: const Icon(Icons.refresh)),
         ]),
-        body: loading ? const Center(child: CircularProgressIndicator()) : error != null ? Center(child: Text(error!)) : RefreshIndicator(
-          onRefresh: load,
-          child: ListView.builder(itemCount: orders.length, itemBuilder: (_, index) {
-            final order = orders[index] as Map<String, dynamic>;
-            return ListTile(leading: CircleAvatar(child: Text('${index + 1}')), title: Text(order['customer_name'] as String), subtitle: Text(order['address'] as String), trailing: Text(order['driver_name'] as String? ?? 'غير معيّنة'));
-          }),
-        ),
-        floatingActionButton: FloatingActionButton.extended(onPressed: optimize, label: const Text('رتّب المسار'), icon: const Icon(Icons.route)),
+        body: loading
+            ? const Center(child: CircularProgressIndicator())
+            : error != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cloud_off, size: 48),
+                          const SizedBox(height: 12),
+                          const Text('تعذر الاتصال بالخادم'),
+                          const SizedBox(height: 8),
+                          Text(error!, textAlign: TextAlign.center),
+                          const SizedBox(height: 16),
+                          OutlinedButton(onPressed: editServerUrl, child: const Text('تغيير عنوان الخادم')),
+                        ],
+                      ),
+                    ),
+                  )
+                : orders.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.inventory_2_outlined, size: 64),
+                              const SizedBox(height: 16),
+                              const Text('لا توجد شحنات حتى الآن', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 8),
+                              const Text('أضف أول شحنة من الهاتف أو من لوحة الإدارة.', textAlign: TextAlign.center),
+                              const SizedBox(height: 20),
+                              FilledButton.icon(onPressed: addOrder, icon: const Icon(Icons.add), label: const Text('إضافة شحنة')),
+                            ],
+                          ),
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: load,
+                        child: ListView.builder(
+                          itemCount: orders.length,
+                          itemBuilder: (_, index) {
+                            final order = orders[index] as Map<String, dynamic>;
+                            return ListTile(
+                              leading: CircleAvatar(child: Text('${index + 1}')),
+                              title: Text(order['customer_name'] as String),
+                              subtitle: Text(order['address'] as String),
+                              trailing: Text(order['driver_name'] as String? ?? 'غير معيّنة'),
+                            );
+                          },
+                        ),
+                      ),
+        floatingActionButton: orders.isEmpty
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: optimize,
+                label: const Text('رتّب المسار'),
+                icon: const Icon(Icons.route),
+              ),
       );
 }
