@@ -85,6 +85,19 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  String apiErrorMessage(http.Response response, String fallback) {
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map<String, dynamic> && body['detail'] != null) {
+        return body['detail'].toString();
+      }
+    } on FormatException {
+      // The server may return a plain-text or proxy error page.
+    }
+    final text = response.body.trim();
+    return text.isEmpty || text.length > 180 ? fallback : '$fallback: $text';
+  }
+
   Future<void> addOrder() async {
     final customerController = TextEditingController();
     final addressController = TextEditingController();
@@ -136,9 +149,9 @@ class _OrdersPageState extends State<OrdersPage> {
         body: jsonEncode({'customer_name': customerName, 'address': address}),
       );
       if (response.statusCode >= 400) {
-        final body = jsonDecode(response.body) as Map<String, dynamic>;
-        throw Exception(body['detail'] ?? 'تعذر إضافة الشحنة');
+        throw Exception(apiErrorMessage(response, 'تعذر إضافة الشحنة'));
       }
+
       await load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

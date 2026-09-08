@@ -115,9 +115,23 @@ def geocode_result(feature: dict[str, Any]) -> dict[str, Any]:
 
 
 async def geocode(address: str) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(f"{settings.photon_url.rstrip('/')}/api", params={"q": address, "limit": 3})
-    response.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                f"{settings.photon_url.rstrip('/')}/api",
+                params={"q": address, "limit": 3},
+            )
+        response.raise_for_status()
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="خدمة Photon غير متاحة. شغّل Photon المحلي ثم أعد المحاولة.",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Photon returned HTTP {exc.response.status_code}.",
+        ) from exc
     features = response.json().get("features", [])
     if not features:
         raise HTTPException(status_code=422, detail=f"No Photon result for address: {address}")
@@ -127,12 +141,23 @@ async def geocode(address: str) -> dict[str, Any]:
 async def osrm_route(points: list[tuple[float, float]]) -> dict[str, Any]:
     coordinates = ";".join(f"{longitude},{latitude}" for longitude, latitude in points)
     url = f"{settings.osrm_url.rstrip('/')}/route/v1/driving/{coordinates}"
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(
-            url,
-            params={"overview": "full", "geometries": "geojson", "steps": "false"},
-        )
-    response.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                url,
+                params={"overview": "full", "geometries": "geojson", "steps": "false"},
+            )
+        response.raise_for_status()
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="خدمة OSRM غير متاحة. شغّل OSRM المحلي ثم أعد المحاولة.",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"OSRM returned HTTP {exc.response.status_code}.",
+        ) from exc
     payload = response.json()
     if payload.get("code") != "Ok" or not payload.get("routes"):
         raise HTTPException(status_code=502, detail="OSRM could not calculate a route")
