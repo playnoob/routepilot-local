@@ -55,6 +55,18 @@ jobs:
           for permission in permissions:
               if permission not in text:
                   text = text.replace('<application', permission + '\n    <application', 1)
+          queries = '''<queries>
+              <intent>
+                  <action android:name="android.intent.action.VIEW"/>
+                  <data android:scheme="osmand.navigation"/>
+              </intent>
+              <intent>
+                  <action android:name="android.intent.action.VIEW"/>
+                  <data android:scheme="om"/>
+              </intent>
+          </queries>'''
+          if '<queries>' not in text:
+              text = text.replace('<manifest', '<manifest', 1).replace('>', '>\n    ' + queries, 1)
           text = text.replace('<application ', '<application android:usesCleartextTraffic="true" ', 1)
           path.write_text(text)
           PY
