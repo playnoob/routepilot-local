@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import math
 import re
 import sqlite3
@@ -61,6 +62,12 @@ class OrderIn(BaseModel):
     address: str = Field(min_length=3, max_length=500)
     driver_id: str | None = None
     notes: str = Field(default="", max_length=500)
+
+
+class BarcodeIn(BaseModel):
+    value: str = Field(min_length=1, max_length=2000)
+    customer_name: str = Field(default="", max_length=120)
+    driver_id: str | None = None
 
 
 class Location(BaseModel):
@@ -284,6 +291,32 @@ async def create_order(payload: OrderIn) -> dict[str, Any]:
              location["latitude"], location["longitude"], location["label"], now()),
         )
     return {"id": order_id, **payload.model_dump(), **location, "status": "pending"}
+
+
+@app.post("/api/orders/from-barcode", status_code=201)
+async def create_order_from_barcode(payload: BarcodeIn) -> dict[str, Any]:
+    raw_value = payload.value.strip()
+    parsed: dict[str, Any] = {}
+    try:
+        candidate = json.loads(raw_value)
+        if isinstance(candidate, dict):
+            parsed = candidate
+    except json.JSONDecodeError:
+        pass
+    address = str(parsed.get("address") or parsed.get("delivery_address") or raw_value).strip()
+    customer_name = str(
+        parsed.get("customer_name") or parsed.get("name") or payload.customer_name or "شحنة ممسوحة"
+    ).strip()
+    if len(address) < 3:
+        raise HTTPException(status_code=422, detail="الباركود لا يحتوي عنواناً قابلاً للبحث")
+    return await create_order(
+        OrderIn(
+            customer_name=customer_name,
+            address=address,
+            driver_id=payload.driver_id,
+            notes=str(parsed.get("tracking_number") or parsed.get("tracking") or ""),
+        )
+    )
 
 
 @app.post("/api/orders/from-image", status_code=201)

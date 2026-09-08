@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 const compiledApiBase = String.fromEnvironment('API_BASE', defaultValue: 'http://10.0.2.2:8000');
 
@@ -129,6 +130,34 @@ class _OrdersPageState extends State<OrdersPage> {
       customerController.dispose();
       addressController.dispose();
       return;
+    }
+
+    Future<void> scanShipment() async {
+      final value = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
+      );
+      if (value == null || value.trim().isEmpty) return;
+      try {
+        final response = await http.post(
+          Uri.parse('$apiBase/api/orders/from-barcode'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'value': value.trim()}),
+        );
+        if (response.statusCode >= 400) {
+          throw Exception(apiErrorMessage(response, 'لم يحتوي الباركود على عنوان صالح'));
+        }
+        await load();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تمت قراءة الشحنة وإضافتها للخريطة')),
+          );
+        }
+      } catch (exception) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$exception')));
+        }
+      }
     }
     final customerName = customerController.text.trim();
     final address = addressController.text.trim();
@@ -312,6 +341,7 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('RoutePilot'), actions: [
           IconButton(onPressed: editServerUrl, tooltip: 'إعداد الخادم', icon: const Icon(Icons.settings_outlined)),
+          IconButton(onPressed: scanShipment, tooltip: 'مسح باركود', icon: const Icon(Icons.qr_code_scanner)),
           IconButton(onPressed: load, icon: const Icon(Icons.refresh)),
         ]),
         body: loading
@@ -347,7 +377,9 @@ class _OrdersPageState extends State<OrdersPage> {
                               const SizedBox(height: 8),
                               const Text('أضف أول شحنة من الهاتف أو من لوحة الإدارة.', textAlign: TextAlign.center),
                               const SizedBox(height: 20),
-                              FilledButton.icon(onPressed: addOrder, icon: const Icon(Icons.add), label: const Text('إضافة شحنة')),
+                              FilledButton.icon(onPressed: scanShipment, icon: const Icon(Icons.qr_code_scanner), label: const Text('مسح باركود الشحنة')),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(onPressed: addOrder, icon: const Icon(Icons.edit_location_alt), label: const Text('إضافة يدوية بديلة')),
                             ],
                           ),
                         ),
@@ -396,3 +428,65 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
       );
 }
+
+class BarcodeScannerPage extends StatefulWidget {
+  const BarcodeScannerPage({super.key});
+
+  @override
+  State<BarcodeScannerPage> createState() => _BarcodeScannerPageState();
+}
+
+class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
+  bool handled = false;
+
+  void onDetect(BarcodeCapture capture) {
+    if (handled) return;
+    for (final barcode in capture.barcodes) {
+      final value = barcode.rawValue;
+      if (value != null && value.trim().isNotEmpty) {
+        handled = true;
+        Navigator.pop(context, value);
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('مسح باركود الشحنة'),
+          actions: [
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+              tooltip: 'إلغاء',
+            ),
+          ],
+        ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            MobileScanner(onDetect: onDetect),
+            Center(
+              child: Container(
+                width: 280,
+                height: 150,
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xffc8f169), width: 3),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+            ),
+            const Positioned(
+              left: 24,
+              right: 24,
+              bottom: 36,
+              child: Text(
+                'وجّه الكاميرا إلى الباركود الموجود على الشحنة',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
