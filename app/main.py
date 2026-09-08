@@ -127,7 +127,10 @@ async def osrm_route(points: list[tuple[float, float]]) -> dict[str, Any]:
     coordinates = ";".join(f"{longitude},{latitude}" for longitude, latitude in points)
     url = f"{settings.osrm_url.rstrip('/')}/route/v1/driving/{coordinates}"
     async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(url, params={"overview": "false", "steps": "false"})
+        response = await client.get(
+            url,
+            params={"overview": "full", "geometries": "geojson", "steps": "false"},
+        )
     response.raise_for_status()
     payload = response.json()
     if payload.get("code") != "Ok" or not payload.get("routes"):
@@ -297,6 +300,7 @@ async def optimize_route(payload: RouteRequest) -> dict[str, Any]:
         "orders": ordered,
         "distance_meters": route["distance"],
         "duration_seconds": route["duration"],
+        "geometry": route.get("geometry", {"type": "LineString", "coordinates": []}),
         "algorithm": "nearest-neighbor + OSRM route",
     }
 
