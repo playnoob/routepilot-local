@@ -18,6 +18,32 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 افتح `http://127.0.0.1:8000`. توثيق الـ API متاح في `/docs`.
 
+## تجربة التطبيق من VS Code قبل بناء APK
+
+لا تحتاج إلى Android Studio أو محاكي Android في مرحلة التجربة. ثبّت VS Code، إضافة Flutter، وFlutter SDK فقط، ثم نفّذ من طرفية VS Code:
+
+```powershell
+cd "C:\Users\Compu Academy\OneDrive\سطح المكتب\APP FOR MAPS"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+وفي طرفية ثانية:
+
+```powershell
+cd "C:\Users\Compu Academy\OneDrive\سطح المكتب\APP FOR MAPS\flutter_app"
+flutter pub get
+flutter run -d chrome --dart-define=API_BASE=http://127.0.0.1:8000
+```
+
+أو استخدم المهام الجاهزة من `Terminal > Run Task`:
+
+- `RoutePilot: Start API`
+- `RoutePilot: Open Flutter Web`
+
+هذه الطريقة تعرض نفس واجهة التطبيق وتسمح بتجربة إضافة الشحنات وترتيبها، بدون تنزيل APK في كل تعديل. لاختبار GPS الحقيقي نحتاج هاتفاً فعلياً أو محاكي Android لاحقاً.
+
+ملاحظة: Flutter SDK نفسه أكبر من 250 ميجابايت عادةً؛ لا يمكن بناء تطبيق Android أصلي بالكامل ضمن هذا الحد. لكن لا تحتاج Android Studio، ويمكن تأجيل تنزيل أدوات Android وبناء APK إلى النهاية.
+
 ## المسارات المهمة
 
 - `GET/POST /api/drivers`: إدارة المندوبين.

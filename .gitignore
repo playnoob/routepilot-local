@@ -4,7 +4,6 @@ __pycache__/
 *.py[cod]
 data/*.db
 .idea/
-.vscode/
 flutter_app/.dart_tool/
 flutter_app/build/
 flutter_app/.packages

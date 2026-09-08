@@ -12,6 +12,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 import httpx
 import pytesseract
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -33,6 +34,13 @@ db_path = Path(settings.database_path)
 db_path.parent.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="RoutePilot Local", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.mount("/static", StaticFiles(directory=Path(__file__).parent.parent / "static"), name="static")
 
 
