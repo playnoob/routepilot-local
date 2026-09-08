@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-const apiBase = String.fromEnvironment('API_BASE', defaultValue: 'http://10.0.2.2:8000');
+const compiledApiBase = String.fromEnvironment('API_BASE', defaultValue: 'http://10.0.2.2:8000');
 
 void main() => runApp(const RoutePilotApp());
 
@@ -28,6 +29,43 @@ class _OrdersPageState extends State<OrdersPage> {
   List<dynamic> orders = [];
   bool loading = true;
   String? error;
+  String apiBase = compiledApiBase;
+
+  Future<void> loadSettings() async {
+    final preferences = await SharedPreferences.getInstance();
+    setState(() => apiBase = preferences.getString('api_base') ?? compiledApiBase);
+    await load();
+  }
+
+  Future<void> editServerUrl() async {
+    final controller = TextEditingController(text: apiBase);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('عنوان الخادم'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'http://192.168.1.20:8000',
+            labelText: 'رابط FastAPI',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.trim().isEmpty) return;
+    final normalized = value.trim().replaceFirst(RegExp(r'/$'), '');
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString('api_base', normalized);
+    setState(() => apiBase = normalized);
+    await load();
+  }
+
   Future<void> load() async {
     try {
       final response = await http.get(Uri.parse('$apiBase/api/orders'));
@@ -57,10 +95,13 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
   @override
-  void initState() { super.initState(); load(); }
+  void initState() { super.initState(); loadSettings(); }
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('RoutePilot'), actions: [IconButton(onPressed: load, icon: const Icon(Icons.refresh))]),
+        appBar: AppBar(title: const Text('RoutePilot'), actions: [
+          IconButton(onPressed: editServerUrl, tooltip: 'إعداد الخادم', icon: const Icon(Icons.settings_outlined)),
+          IconButton(onPressed: load, icon: const Icon(Icons.refresh)),
+        ]),
         body: loading ? const Center(child: CircularProgressIndicator()) : error != null ? Center(child: Text(error!)) : RefreshIndicator(
           onRefresh: load,
           child: ListView.builder(itemCount: orders.length, itemBuilder: (_, index) {
