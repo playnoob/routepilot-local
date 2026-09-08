@@ -492,3 +492,4 @@ class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
           ],
         ),
       );
+}
