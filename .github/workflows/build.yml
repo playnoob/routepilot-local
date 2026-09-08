@@ -1,0 +1,74 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      api_base:
+        description: "FastAPI URL reachable from the phone, e.g. http://192.168.1.20:8000"
+        required: false
+        default: "http://10.0.2.2:8000"
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. جلب الكود من المستودع
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. إعداد بيئة Java
+      - name: Setup Java Development Kit
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      # 3. إعداد بيئة Flutter
+      - name: Setup Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+          cache: true
+
+      - name: Generate Android project files
+        working-directory: flutter_app
+        run: flutter create . --platforms=android --project-name routepilot_mobile --org com.routepilot
+
+      - name: Allow location access
+        working-directory: flutter_app
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          text = path.read_text()
+          permission = '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>'
+          if permission not in text:
+              text = text.replace('<application', permission + '\n    <application', 1)
+              path.write_text(text)
+          PY
+
+      # 4. تثبيت المكتبات
+      - name: Install Dependencies
+        working-directory: flutter_app
+        run: flutter pub get
+
+      # 5. بناء ملف APK
+      - name: Build APK
+        working-directory: flutter_app
+        env:
+          API_BASE: ${{ github.event.inputs.api_base || 'http://10.0.2.2:8000' }}
+        run: flutter build apk --release --no-tree-shake-icons --dart-define=API_BASE="$API_BASE"
+
+      # 6. رفع ملف APK كناتج قابل للتحميل
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
