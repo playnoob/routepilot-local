@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import math
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -147,6 +148,17 @@ def haversine(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 2 * radius * math.asin(math.sqrt(value))
 
 
+def stop_key(address: str) -> str:
+    normalized = re.sub(r"[\s،,؛;]+", " ", address.casefold()).strip()
+    building = re.search(r"\b\d+[a-zا-ي]?\b", normalized)
+    if not building:
+        return normalized
+    street = re.sub(r"\b\d+[a-zا-ي]?\b", " ", normalized)
+    street = re.sub(r"\b(?:شقة|شقه|دور|وحدة|وحده|apartment|apt|floor|unit)\b", " ", street)
+    street_name = re.sub(r"\s+", " ", street).strip()
+    return f"{street_name}|{building.group(0)}"
+
+
 def order_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return dict(row)
 
@@ -278,26 +290,45 @@ async def optimize_route(payload: RouteRequest) -> dict[str, Any]:
     if len(rows) != len(payload.order_ids):
         raise HTTPException(status_code=404, detail="One or more order IDs were not found")
     orders = {row["id"]: order_to_dict(row) for row in rows}
-    remaining = list(payload.order_ids)
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for order_id in payload.order_ids:
+        order = orders[order_id]
+        groups.setdefault(stop_key(order["address"]), []).append(order)
+    stops = []
+    for key, grouped_orders in groups.items():
+        stops.append({
+            "id": f"stop_{uuid.uuid4().hex[:10]}",
+            "key": key,
+            "latitude": sum(item["latitude"] for item in grouped_orders) / len(grouped_orders),
+            "longitude": sum(item["longitude"] for item in grouped_orders) / len(grouped_orders),
+            "orders": grouped_orders,
+        })
+    remaining = list(range(len(stops)))
     current = (payload.start.longitude, payload.start.latitude)
-    ordered: list[dict[str, Any]] = []
+    ordered_stops: list[dict[str, Any]] = []
     while remaining:
-        next_id = min(
+        next_index = min(
             remaining,
-            key=lambda item: haversine(current, (orders[item]["longitude"], orders[item]["latitude"])),
+            key=lambda item: haversine(current, (stops[item]["longitude"], stops[item]["latitude"])),
         )
-        next_order = orders[next_id]
-        ordered.append(next_order)
-        current = (next_order["longitude"], next_order["latitude"])
-        remaining.remove(next_id)
+        next_stop = stops[next_index]
+        ordered_stops.append(next_stop)
+        current = (next_stop["longitude"], next_stop["latitude"])
+        remaining.remove(next_index)
     points = [(payload.start.longitude, payload.start.latitude)] + [
-        (item["longitude"], item["latitude"]) for item in ordered
+        (item["longitude"], item["latitude"]) for item in ordered_stops
     ]
     route = await osrm_route(points)
-    for index, item in enumerate(ordered, start=1):
-        item["sequence"] = index
+    ordered: list[dict[str, Any]] = []
+    for index, stop in enumerate(ordered_stops, start=1):
+        stop["sequence"] = index
+        for item in stop["orders"]:
+            item["stop_id"] = stop["id"]
+            item["stop_sequence"] = index
+            ordered.append(item)
     return {
         "orders": ordered,
+        "stops": ordered_stops,
         "distance_meters": route["distance"],
         "duration_seconds": route["duration"],
         "geometry": route.get("geometry", {"type": "LineString", "coordinates": []}),
@@ -316,9 +347,9 @@ async def export_gpx(payload: RouteRequest) -> Response:
     segment = SubElement(track, "trkseg")
     start_point = SubElement(segment, "trkpt", {"lat": str(payload.start.latitude), "lon": str(payload.start.longitude)})
     SubElement(start_point, "name").text = "Start"
-    for item in optimized["orders"]:
-        point = SubElement(segment, "trkpt", {"lat": str(item["latitude"]), "lon": str(item["longitude"])})
-        SubElement(point, "name").text = f"{item['sequence']}. {item['customer_name']}"
-        SubElement(point, "desc").text = item["address"]
+    for stop in optimized["stops"]:
+        point = SubElement(segment, "trkpt", {"lat": str(stop["latitude"]), "lon": str(stop["longitude"])})
+        SubElement(point, "name").text = f"{stop['sequence']}. {len(stop['orders'])} deliveries"
+        SubElement(point, "desc").text = " | ".join(item["address"] for item in stop["orders"])
     content = tostring(gpx, encoding="utf-8", xml_declaration=True)
     return Response(content, media_type="application/gpx+xml", headers={"Content-Disposition": 'attachment; filename="routepilot-route.gpx"'})

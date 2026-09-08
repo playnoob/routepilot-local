@@ -38,6 +38,7 @@ class _OrdersPageState extends State<OrdersPage> {
   double? routeDurationSeconds;
   LatLng? currentLocation;
   bool optimizing = false;
+  List<dynamic> routeStops = [];
 
   Future<void> loadSettings() async {
     final preferences = await SharedPreferences.getInstance();
@@ -168,6 +169,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final result = jsonDecode(response.body) as Map<String, dynamic>;
       setState(() {
         orders = result['orders'] as List<dynamic>;
+        routeStops = result['stops'] as List<dynamic>? ?? [];
         routeGeometry = result['geometry'] as Map<String, dynamic>?;
         routeDistanceMeters = (result['distance_meters'] as num?)?.toDouble();
         routeDurationSeconds = (result['duration_seconds'] as num?)?.toDouble();
@@ -178,8 +180,9 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => optimizing = false);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(exception.toString())));
     }
+  }
 
-    List<LatLng> get routePoints {
+  List<LatLng> get routePoints {
       final coordinates = routeGeometry?['coordinates'] as List<dynamic>? ?? [];
       return coordinates
           .whereType<List<dynamic>>()
@@ -188,20 +191,20 @@ class _OrdersPageState extends State<OrdersPage> {
           .toList();
     }
 
-    Future<void> openNavigation(Map<String, dynamic> order, {required bool osmand}) async {
+  Future<void> openNavigation(Map<String, dynamic> order, {required bool osmand}) async {
       final latitude = order['latitude'];
       final longitude = order['longitude'];
       if (latitude is! num || longitude is! num) return;
       final label = Uri.encodeComponent(order['customer_name'] as String? ?? 'Delivery');
       final url = osmand
-          ? Uri.parse('osmandmaps://navigate?lat=$latitude&lon=$longitude&title=$label')
-          : Uri.parse('organicmaps://map?v=1&ll=$latitude,$longitude&n=$label');
+          ? Uri.parse('osmand.navigation:q=$latitude,$longitude&title=$label')
+          : Uri.parse('om://map?v=1&ll=$latitude,$longitude&n=$label');
       if (!await launchUrl(url, mode: LaunchMode.externalApplication) && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('التطبيق الملاحي غير مثبت')));
       }
     }
 
-    Widget buildMap() {
+  Widget buildMap() {
       final markers = <Marker>[
         if (currentLocation != null)
           Marker(
@@ -210,20 +213,23 @@ class _OrdersPageState extends State<OrdersPage> {
             height: 44,
             child: const Icon(Icons.my_location, color: Colors.blue, size: 30),
           ),
-        ...orders.asMap().entries.where((entry) {
+        ...(routeStops.isNotEmpty ? routeStops : orders).asMap().entries.where((entry) {
           final order = entry.value as Map<String, dynamic>;
           return order['latitude'] is num && order['longitude'] is num;
         }).map((entry) {
-          final order = entry.value as Map<String, dynamic>;
+          final stop = entry.value as Map<String, dynamic>;
+          final stopOrders = stop['orders'] as List<dynamic>? ?? [];
           return Marker(
-            point: LatLng((order['latitude'] as num).toDouble(), (order['longitude'] as num).toDouble()),
+            point: LatLng((stop['latitude'] as num).toDouble(), (stop['longitude'] as num).toDouble()),
             width: 44,
             height: 44,
             child: GestureDetector(
-              onTap: () => showOrderActions(order, entry.key + 1),
+              onTap: () => stopOrders.isNotEmpty
+                  ? showOrderActions(stopOrders.first as Map<String, dynamic>, entry.key + 1)
+                  : showOrderActions(stop, entry.key + 1),
               child: CircleAvatar(
                 backgroundColor: const Color(0xffc8f169),
-                child: Text('${entry.key + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                child: Text('${stop['sequence'] ?? entry.key + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
           );
@@ -254,7 +260,7 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
       );
-    }
+  }
 
     Future<void> showOrderActions(Map<String, dynamic> order, int sequence) async {
       await showModalBottomSheet<void>(
@@ -287,7 +293,6 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       );
     }
-  }
   @override
   void initState() { super.initState(); loadSettings(); }
   @override
