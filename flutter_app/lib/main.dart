@@ -132,33 +132,6 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    Future<void> scanShipment() async {
-      final value = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
-      );
-      if (value == null || value.trim().isEmpty) return;
-      try {
-        final response = await http.post(
-          Uri.parse('$apiBase/api/orders/from-barcode'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'value': value.trim()}),
-        );
-        if (response.statusCode >= 400) {
-          throw Exception(apiErrorMessage(response, 'لم يحتوي الباركود على عنوان صالح'));
-        }
-        await load();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تمت قراءة الشحنة وإضافتها للخريطة')),
-          );
-        }
-      } catch (exception) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$exception')));
-        }
-      }
-    }
     final customerName = customerController.text.trim();
     final address = addressController.text.trim();
     customerController.dispose();
@@ -193,6 +166,35 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     }
   }
+
+  Future<void> scanShipment() async {
+    final value = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
+    );
+    if (value == null || value.trim().isEmpty) return;
+    try {
+      final response = await http.post(
+        Uri.parse('$apiBase/api/orders/from-barcode'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'value': value.trim()}),
+      );
+      if (response.statusCode >= 400) {
+        throw Exception(apiErrorMessage(response, 'لم يحتوي الباركود على عنوان صالح'));
+      }
+      await load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تمت قراءة الشحنة وإضافتها للخريطة')),
+        );
+      }
+    } catch (exception) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$exception')));
+      }
+    }
+  }
+
   Future<void> optimize() async {
     if (orders.isEmpty) return;
     try {
